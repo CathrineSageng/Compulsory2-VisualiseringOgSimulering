@@ -578,7 +578,7 @@
   </ItemGroup>
   <ItemGroup>
     <Text Include="dependencies\include\glm\CMakeLists.txt" />
-    <Text Include="utdata.txt" />
+    <Text Include="terrengdata.txt" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="Textures\ball.jpg" />

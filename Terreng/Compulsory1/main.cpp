@@ -16,9 +16,6 @@
 #include <pdal/io/LasReader.hpp>
 #include <pdal/Options.hpp>
 #include <fstream>
-#include <cstdlib> // For rand()
-#include <ctime>   // For time()
-
 
 using namespace std;
 
@@ -28,7 +25,7 @@ const unsigned int SCR_HEIGHT = 1200;
 
 // Camera settings
 //This is the starting position of the of the camera 
-Camera camera(glm::vec3(0.5f, 0.5f, 30.0f));
+Camera camera(glm::vec3(0.5f, 0.5f, 1.0f));
 
 //Keeps track of the last position of the mouse cursor 
 GLfloat lastX = SCR_WIDTH / 2.0f;
@@ -45,11 +42,11 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void processInput(GLFWwindow* window);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
-void convertLazToText(const std::string& inputFilename, const std::string& outputFilename);
-std::vector<glm::vec3> loadPointsFromTextFile(const std::string& filename);
+void convertLazToText(const string& inputFilename, const string& outputFilename);
+vector<glm::vec3> loadPointsFromTextFile(const string& filename);
 
-std::string vfs = ShaderLoader::LoadShaderFromFile("vs.vs");
-std::string fs = ShaderLoader::LoadShaderFromFile("fs.fs");
+string vfs = ShaderLoader::LoadShaderFromFile("vs.vs");
+string fs = ShaderLoader::LoadShaderFromFile("fs.fs");
 
 int main()
 {
@@ -93,15 +90,15 @@ int main()
     glEnable(GL_DEPTH_TEST);
 
     // Konverter .laz-filen til en tekstfil
-    convertLazToText("32-1-512-125-45.laz", "utdata.txt");
+    convertLazToText("32-1-512-125-45.laz", "terrengdata.txt");
 
     // Les punktene fra tekstfilen
-    std::vector<glm::vec3> points = loadPointsFromTextFile("utdata.txt");
+    std::vector<glm::vec3> points = loadPointsFromTextFile("terrengdata.txt");
 
     // Sjekk at vi faktisk har punkter
     if (points.empty())
     {
-        std::cerr << "Ingen punkter å rendre." << std::endl;
+        cerr << "Ingen punkter å rendre." << endl;
         return -1;
     }
 
@@ -149,7 +146,7 @@ int main()
 
         // Tegn punktsky
         glBindVertexArray(VAO);
-        glPointSize(20.0f); // Juster punktstørrelse
+        glPointSize(3.0f); 
         glDrawArrays(GL_POINTS, 0, static_cast<GLsizei>(points.size()));
         glBindVertexArray(0);
 
@@ -217,7 +214,7 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 }
 
 
-void convertLazToText(const std::string& inputFilename, const std::string& outputFilename)
+void convertLazToText(const string& inputFilename, const string& outputFilename)
 {
     // Lag et Options-objekt fra PDAL for å spesifisere filen
     pdal::Options options;
@@ -236,7 +233,7 @@ void convertLazToText(const std::string& inputFilename, const std::string& outpu
     std::ofstream outFile(outputFilename);
     if (!outFile.is_open())
     {
-        std::cerr << "Kunne ikke åpne utdatafilen." << std::endl;
+        cerr << "Kunne ikke åpne utdatafilen." << endl;
         return;
     }
 
@@ -246,7 +243,7 @@ void convertLazToText(const std::string& inputFilename, const std::string& outpu
     {
         totalPoints += view->size();
     }
-    outFile << totalPoints << std::endl;
+    outFile << totalPoints << endl;
 
     // Iterer gjennom punktene og skriv dem til filen
     for (auto& view : viewSet)
@@ -256,28 +253,28 @@ void convertLazToText(const std::string& inputFilename, const std::string& outpu
             double x = view->getFieldAs<double>(pdal::Dimension::Id::X, i);
             double y = view->getFieldAs<double>(pdal::Dimension::Id::Y, i);
             double z = view->getFieldAs<double>(pdal::Dimension::Id::Z, i);
-            outFile << x << " " << y << " " << z << std::endl;
+            outFile << x << " " << y << " " << z << endl;
         }
     }
 
     outFile.close();
-    std::cout << "Konvertering fullført! Punktdata skrevet til " << outputFilename << std::endl;
+    cout << "Konvertering fullført! Punktdata skrevet til " << outputFilename << endl;
 }
 
-std::vector<glm::vec3> loadPointsFromTextFile(const std::string& filename)
+std::vector<glm::vec3> loadPointsFromTextFile(const string& filename)
 {
-    std::ifstream inFile(filename);
-    std::vector<glm::vec3> points;
+    ifstream inFile(filename);
+    vector<glm::vec3> points;
 
     if (!inFile.is_open())
     {
-        std::cerr << "Kunne ikke åpne filen: " << filename << std::endl;
+        cerr << "Kunne ikke åpne filen: " << filename << endl;
         return points;
     }
 
     size_t numPoints;
     inFile >> numPoints; // Leser antall punkter fra første linje
-    std::cout << "Antall punkter i filen: " << numPoints << std::endl;
+    cout << "Antall punkter i filen: " << numPoints << endl;
 
     float x, y, z;
     //const float scaleFactor = 0.00001f; // Skaleringsfaktor for å bringe punktene nærmere kameraet
@@ -285,7 +282,7 @@ std::vector<glm::vec3> loadPointsFromTextFile(const std::string& filename)
 
     const float xScaleFactor = 0.001f;   // Større skaleringsfaktor for x
     const float yScaleFactor = 0.001f;  // Standard skaleringsfaktor for y
-    const float zScaleFactor = 0.001f * 100.0f; // Forsterk Z for bedre dybde
+    const float zScaleFactor = 0.001f * 1.0f; // Forsterk Z for bedre dybde
     /*const float scaleFactor = 0.001f;*/ // Øk skaleringsfaktoren for å se om spredningen blir bedre
     const glm::vec3 translationOffset(-580.0f, -6603.0f, 0.0f); // Flytter punktene nærmere origo i x og y
 
@@ -297,17 +294,17 @@ std::vector<glm::vec3> loadPointsFromTextFile(const std::string& filename)
         point += translationOffset; // Flytter punktene etter skalering
         points.push_back(point);
 
-        // Skriv ut de første 10 punktene for å bekrefte at de er riktig lastet inn
+        // Skriv ut de første 100 punktene for å bekrefte at de er riktig lastet inn
         if (pointCounter < 100)
         {
-            std::cout << "Punkt " << pointCounter + 1 << ": "
-                << point.x << ", " << point.y << ", " << point.z << std::endl;
+            cout << "Punkt " << pointCounter + 1 << ": "
+                << point.x << ", " << point.y << ", " << point.z <<endl;
         }
         pointCounter++;
     }
 
     inFile.close();
-    std::cout << "Totalt antall lastede punkter: " << points.size() << std::endl;
+    cout << "Totalt antall lastede punkter: " << points.size() <<endl;
     return points;
 }
 
