@@ -18,7 +18,7 @@
 #include <fstream>
 #include <filesystem>
 
-
+//Punktdata som viser kart over Nydal
 using namespace std;
 
 // Global variables
