@@ -18,7 +18,7 @@ const unsigned int SCR_HEIGHT = 1200;
 
 // Camera settings
 //This is the starting position of the of the camera 
-Camera camera(glm::vec3(0.0f, 1.0f, 2.0f));
+Camera camera(glm::vec3(1.0f, 1.0f, 5.0f));
 //Keeps track of the last position of the mouse cursor 
 GLfloat lastX = SCR_WIDTH / 2.0f;
 GLfloat lastY = SCR_HEIGHT / 2.0f;
@@ -30,27 +30,34 @@ float deltaTime = 0.0f;
 //Stores the timestamp of previous frame. 
 float lastFrame = 0.0f;
 
+//The control points from the Matematikk 3 lecture file, chapter 12. 
+std::vector<glm::vec3> controlPoints = {
+    glm::vec3(0.0f, 0.0f,  0.0f), glm::vec3(1.0f, 0.0f,  0.0f), glm::vec3(2.0f, 0.0f,  0.0f), glm::vec3(3.0f, 0.0f,  0.0f),
+    glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(1.0f, 1.0f,  2.0f), glm::vec3(2.0f, 1.0f,  2.0f), glm::vec3(3.0f, 1.0f,  0.0f),
+    glm::vec3(0.0f, 2.0f,  0.0f), glm::vec3(1.0f,  2.0f,  0.0f), glm::vec3(2.0f,  2.0f,  0.0f), glm::vec3(3.0f,  2.0f,  0.0f),
+};
+
+
+glm::vec3 BSplineSurface(float u, float v, const std::vector<glm::vec3>& controlPoints, int width)
+{
+    // B-spline basis-funksjoner for kvadratisk spline (grad 2)
+    float n_u[3] = { (1.0f - u) * (1.0f - u) / 2.0f, -u * u + 1.0f, u * u / 2.0f };
+    float n_v[3] = { (1.0f - v) * (1.0f - v) / 2.0f, -v * v + 1.0f, v * v / 2.0f };
+
+    glm::vec3 point(0.0f);
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            point += n_u[i] * n_v[j] * controlPoints[i * width + j];
+        }
+    }
+    return point;
+}
+
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void processInput(GLFWwindow* window);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 
-// Bezier function to calculate a point on a cubic bezier curve. 
-//The curve har 4 control points and a floating parameter t, that varies between 0 and 1. 
-glm::vec3 bezier(glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float t) {
-    float u = 1.0f - t;
-    float tt = t * t;
-    float uu = u * u;
-    float uuu = uu * u;
-    float ttt = tt * t;
-
-    glm::vec3 point = uuu * p0;   // (1 - t)^3 * P0
-    point += 3 * uu * t * p1;     // 3(1 - t)^2 * t * P1
-    point += 3 * u * tt * p2;     // 3(1 - t) * t^2 * P2
-    point += ttt * p3;            // t^3 * P3
-
-    return point;
-}
 
 std::string vfs = ShaderLoader::LoadShaderFromFile("vs.vs");
 std::string fs = ShaderLoader::LoadShaderFromFile("fs.fs");
@@ -96,44 +103,44 @@ int main()
     // Enable depth testing
     glEnable(GL_DEPTH_TEST);
 
-    // Control points for the square spline (Bezier curve)
-    std::vector<glm::vec3> controlPoints = {
-        glm::vec3(-0.5f, 0.5f, 0.0f),  // Top-left
-        glm::vec3(-0.5f, -0.5f, 0.0f),  // Bottom-left
-        glm::vec3(0.5f, -0.5f, 0.0f),  // Bottom-right
-        glm::vec3(0.5f, 0.5f, 0.0f)   // Top-right
-    };
-
-    // Generate points along the Bezier curve
-    int numPoints = 50;
-    vector<glm::vec3> splinePoints;
-    for (int i = 0; i <= numPoints; ++i) {
-        float t = (float)i / (float)numPoints;
-        glm::vec3 point = bezier(controlPoints[0], controlPoints[1], controlPoints[2], controlPoints[3], t);
-        splinePoints.push_back(point);
+    std::vector<glm::vec3> surfacePoints;
+    int resolution = 10; // Oppløsning på flaten
+    for (int i = 0; i < resolution; ++i) {
+        for (int j = 0; j < resolution; ++j) {
+            float u = i / static_cast<float>(resolution - 1);
+            float v = j / static_cast<float>(resolution - 1);
+            surfacePoints.push_back(BSplineSurface(u, v, controlPoints, 4)); // 4 er bredden på kontrollpunktsnettet
+        }
     }
 
-    // VAO and VBO setup
-    unsigned int VAO, VBO;
+    // Indekser for å tegne wireframe
+    std::vector<unsigned int> indices;
+    for (int i = 0; i < resolution - 1; ++i) {
+        for (int j = 0; j < resolution - 1; ++j) {
+            indices.push_back(i * resolution + j);
+            indices.push_back((i + 1) * resolution + j);
+
+            indices.push_back(i * resolution + j);
+            indices.push_back(i * resolution + (j + 1));
+        }
+    }
+
+    unsigned int VBO, VAO, EBO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
+    glGenBuffers(1, &EBO);
 
-    // Bind VAO
     glBindVertexArray(VAO);
-
-    // Bind VBO, upload spline points to the buffer
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, splinePoints.size() * sizeof(glm::vec3), &splinePoints[0], GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, surfacePoints.size() * sizeof(glm::vec3), &surfacePoints[0], GL_STATIC_DRAW);
 
-    // Define the vertex attributes (position)
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
-    // Unbind VBO and VAO
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW);
 
-    unsigned int controlVAO, controlVBO;
+    unsigned int controlVBO, controlVAO;
     glGenVertexArrays(1, &controlVAO);
     glGenBuffers(1, &controlVBO);
 
@@ -141,12 +148,8 @@ int main()
     glBindBuffer(GL_ARRAY_BUFFER, controlVBO);
     glBufferData(GL_ARRAY_BUFFER, controlPoints.size() * sizeof(glm::vec3), &controlPoints[0], GL_STATIC_DRAW);
 
-    // Define the vertex attributes for control points
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
 
     while (!glfwWindowShouldClose(window))
     {
@@ -171,21 +174,14 @@ int main()
         model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f));
         ourShader.setMat4("model", model);
 
-        // Draw the spline curve
         glBindVertexArray(VAO);
-        glDrawArrays(GL_LINE_STRIP, 0, splinePoints.size());
+        glDrawElements(GL_LINES, indices.size(), GL_UNSIGNED_INT, 0);
         glBindVertexArray(0);
 
-        // Render control points and connecting lines
-        glPointSize(10.0f); // Make control points larger
+        // Render control points
         glBindVertexArray(controlVAO);
-
-        // Draw the lines between control points
-        glDrawArrays(GL_LINE_STRIP, 0, controlPoints.size());
-
-        // Draw control points
+        glPointSize(10.0f);
         glDrawArrays(GL_POINTS, 0, controlPoints.size());
-
         glBindVertexArray(0);
 
         glfwSwapBuffers(window);
