@@ -1,11 +1,15 @@
 #include<iostream>
+#include <fstream>
+#include <filesystem>
+#include<vector>
+
 #include "glm/mat4x3.hpp"
 #include<glad/glad.h>
 #include<GLFW/glfw3.h>
 #include<glm/glm.hpp>
 #include<glm/gtc/matrix_transform.hpp>
 #include<glm/gtc/type_ptr.hpp>
-#include<vector>
+
 #include "Shader.h"
 #include "ShaderFileLoader.h"
 #include "Camera.h"
@@ -15,11 +19,11 @@
 #include <pdal/PointView.hpp>
 #include <pdal/io/LasReader.hpp>
 #include <pdal/Options.hpp>
-#include <fstream>
-#include <filesystem>
 
-//Punktdata som viser kart over Nydal
 using namespace std;
+
+//This exercise shows data points over the terrain in Nydal. The data points are converted from LAZ(compressed version of LAS files)
+// to text files. There are 6 LAZ files that have been converted from LAZ to text files 
 
 // Global variables
 const unsigned int SCR_WIDTH = 1600;
@@ -32,6 +36,7 @@ Camera camera(glm::vec3(2.0f, 11.8f, 0.3f));
 //Keeps track of the last position of the mouse cursor 
 GLfloat lastX = SCR_WIDTH / 2.0f;
 GLfloat lastY = SCR_HEIGHT / 2.0f;
+
 //Avoids sudden jumps in the camera orientation when the mouse is first detected. 
 bool firstMouse = true;
 
@@ -44,7 +49,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void processInput(GLFWwindow* window);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
-void convertLazToText(const string& inputFilename, const string& outputFilename);
+void convertLazFilesToTextFiles(const string& inputFilename, const string& outputFilename);
 vector<glm::vec3> loadPointsFromTextFile(const string& filename);
 std::vector<glm::vec3> loadPointsFromMultipleTextFiles(const std::vector<std::string>& textFiles);
 
@@ -53,19 +58,15 @@ string fs = ShaderLoader::LoadShaderFromFile("fs.fs");
 
 int main()
 {
- 
-    // Simuler forsinkelse før andre kjøring
-    std::this_thread::sleep_for(std::chrono::seconds(2));
-
     std::cout << "vfs " << vfs.c_str() << std::endl;
     std::cout << "fs " << fs.c_str() << std::endl;
+
     // glfw: initialize and configure
     // ------------------------------
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
 
     // glfw window creation
     // --------------------
@@ -96,47 +97,49 @@ int main()
     // Enable depth testing
     glEnable(GL_DEPTH_TEST);
 
-     // Liste over .laz-filer du vil konvertere
-    std::vector<std::string> lazFiles = {
+    //A List over the 6 .laz files that contains the data points from Nydal. 
+    // The data points are ordered on høydedata.no
+    vector<string> lazFiles = 
+    {
         "32-2-517-155-02.laz", "32-2-517-155-03.laz", "32-2-517-155-12.laz", "32-2-517-155-13.laz", 
         "32-2-517-155-22.laz", "32-2-517-155-23.laz"
     };
 
-    // Liste over tekstfiler som resultat av konverteringen
-    std::vector<std::string> textFiles = {
+    // A list of the .txt files that stores the x, y, z coordinates after the conversion
+    vector<string> textFiles = 
+    {
         "32-2-517-155-02.txt", "32-2-517-155-03.txt", "32-2-517-155-12.txt", "32-2-517-155-13.txt", 
         "32-2-517-155-22.txt", "32-2-517-155-23.txt"
     };
 
-    for (size_t i = 0; i < lazFiles.size(); ++i)
+    //The loop iterates over the lazFiles and uses the 'convertLazFilesToTextFiles' function to convert the files
+    // to text files. 
+    for (int i = 0; i < lazFiles.size(); ++i)
     {
-        convertLazToText(lazFiles[i], textFiles[i]);
+        convertLazFilesToTextFiles(lazFiles[i], textFiles[i]);
     }
 
-    // Laster alle punktene fra de konverterte tekstfilene
-    std::vector<glm::vec3> points = loadPointsFromMultipleTextFiles(textFiles);
+    // Stores the points from the text file 
+    vector<glm::vec3> points = loadPointsFromMultipleTextFiles(textFiles);
 
+    //Checks if the points are available to render
     if (points.empty())
     {
-        std::cerr << "Ingen punkter å rendre." << std::endl;
+        cerr << "Ingen punkter å rendre." << endl;
         return -1;
     }
 
-    // Opprett VAO og VBO for punktene
     GLuint VAO, VBO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
 
-    // Bind VAO og VBO
     glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, points.size() * sizeof(glm::vec3), points.data(), GL_STATIC_DRAW);
 
-    // Konfigurer vertex-attributt
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void*)0);
     glEnableVertexAttribArray(0);
 
-    // Frigjør bufferet
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 
@@ -164,7 +167,7 @@ int main()
         model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f));
         ourShader.setMat4("model", model);
 
-        // Tegn punktsky
+        //Rendering the points 
         glBindVertexArray(VAO);
         glPointSize(3.0f); 
         glDrawArrays(GL_POINTS, 0, static_cast<GLsizei>(points.size()));
@@ -233,117 +236,124 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
     camera.ProcessMouseScroll(static_cast<float>(yoffset));
 }
 
-
-void convertLazToText(const std::string& inputFilename, const std::string& outputFilename)
+//Function for conveting .laz file to a text file. The text file will contain x, y, z coordinates from the .laz file 
+void convertLazFilesToTextFiles(const string& inputFilename, const string& outputFilename)
 {  
-    // Slett eksisterende tekstfil hvis den allerede eksisterer (slett kun outputFilename, som er tekstfilen)
-    if (std::filesystem::exists(outputFilename))
+    //Removes the text file if the file already exits. The program is not able to open the text file if the old 
+    // version is still there. Are not able to open the outputfile 
+    if (filesystem::exists(outputFilename))
     {
-        std::filesystem::remove(outputFilename); // Slett bare tekstfilen, IKKE .laz-filen
+        filesystem::remove(outputFilename);
     }
 
-    // Konverteringslogikk for å generere tekstfil basert på inputFilename (som er .laz-filen)
-    try
+    //Sets up PDAL so it can read the .laz file 
+    //PDAL(Point Data Abstarction Library)
+    //Holds the settings for reading the file 
+    pdal::Options options;
+    options.add("filename", inputFilename);
+
+    //Creates an objects to read the .laz files
+    pdal::LasReader reader;
+    reader.setOptions(options);
+
+    //Reads the point data from the .laz file 
+    pdal::PointTable table;
+    reader.prepare(table);
+    pdal::PointViewSet coordinates = reader.execute(table);
+
+    //Opens the text file the data points are going to be converted to. 
+    ofstream outFile(outputFilename);
+    if (!outFile.is_open())
     {
-        pdal::Options options;
-        options.add("filename", inputFilename);
-
-        pdal::LasReader reader;
-        reader.setOptions(options);
-
-        pdal::PointTable table;
-        reader.prepare(table);
-        pdal::PointViewSet viewSet = reader.execute(table);
-
-        std::ofstream outFile(outputFilename); // Skriv til tekstfilen
-        if (!outFile.is_open())
-        {
-            std::cerr << "Kunne ikke åpne utdatafilen: " << outputFilename << std::endl;
+        cerr << "Not able to open the output file: " << outputFilename << endl;
             return;
-        }
+    }
 
-        size_t totalPoints = 0;
-        for (auto& view : viewSet)
-        {
-            totalPoints += view->size();
-        }
-        outFile << totalPoints << std::endl;
+    //Counts the total number of data points in the .laz file and writes the total number at the first line of the text file 
+    size_t totalPoints = 0;
+    for (auto& coordinate : coordinates)
+    {
+            totalPoints += coordinate->size();
+    }
+    outFile << totalPoints << endl;
 
-        for (auto& view : viewSet)
+    //Gets every x, y, z coordinate from the .laz file and writes them to the text file. 
+    //The points are retrived from the .laz file using 'getFiledAs'
+    for (auto& view : coordinates)
+    {
+        for (pdal::PointId i = 0; i < view->size(); ++i)
         {
-            for (pdal::PointId i = 0; i < view->size(); ++i)
-            {
-                double x = view->getFieldAs<double>(pdal::Dimension::Id::X, i);
-                double y = view->getFieldAs<double>(pdal::Dimension::Id::Y, i);
-                double z = view->getFieldAs<double>(pdal::Dimension::Id::Z, i);
-                outFile << x << " " << y << " " << z << std::endl;
+            double x = view->getFieldAs<double>(pdal::Dimension::Id::X, i);
+            double y = view->getFieldAs<double>(pdal::Dimension::Id::Y, i);
+            double z = view->getFieldAs<double>(pdal::Dimension::Id::Z, i);
+            outFile << x << " " << y << " " << z << endl;
             }
         }
 
-        outFile.close();
-        std::cout << "Konvertering fullført for: " << inputFilename << std::endl;
-    }
-    catch (const pdal::pdal_error& e)
-    {
-        std::cerr << "PDAL error: " << e.what() << " i filen " << inputFilename << std::endl;
-    }
-    catch (const std::exception& e)
-    {
-        std::cerr << "Standardfeil: " << e.what() << " i filen " << inputFilename << std::endl;
-    }
+    //Closes the output file
+    outFile.close();
+    cout << "Conversion completed for: " << inputFilename << endl;
 }
 
-std::vector<glm::vec3> loadPointsFromTextFile(const string& filename)
+//Function for reading the coordinates from the text file to rendering
+vector<glm::vec3> loadPointsFromTextFile(const string& filename)
 {
+    //ifstream opens the file for reading
     ifstream inFile(filename);
     vector<glm::vec3> points;
 
+    //Checks if the opening of the file was succsessful. 
     if (!inFile.is_open())
     {
-        cerr << "Kunne ikke åpne filen: " << filename << endl;
+        cerr << "Could not open the file " << filename << endl;
         return points;
     }
 
+    //Reads number of points of the text file (the first line of the text file)
     size_t numPoints;
-    inFile >> numPoints; // Leser antall punkter fra første linje
-    cout << "Antall punkter i filen: " << numPoints << endl;
+    inFile >> numPoints;
+    cout << "Number of points in the file: " << numPoints << endl;
 
+    //The variables are used to scale and translate the data points (coordinates) so we can see them in the camera view
     float x, y, z;
 
-    const float xScaleFactor = 0.0001f;   // Større skaleringsfaktor for x
-    const float yScaleFactor = 0.0001f;  // Standard skaleringsfaktor for y
-    const float zScaleFactor = 0.0001f; // Forsterk Z for bedre dybde
-    const glm::vec3 translationOffset(-59.0f, -663.0f, 0.0f); // Flytter punktene nærmere origo i x og y
+    const float xScale = 0.0001f;   
+    const float yScale = 0.0001f;  
+    const float zScale = 0.0001f;
+    //Moves the points near origo
+    const glm::vec3 translationOffset(-59.0f, -663.0f, 0.0f); 
 
+    //The loop reads the data points from the text file. The data points are scaled and translated, and then beeing stored in a vector
     size_t pointCounter = 0;
     while (inFile >> x >> y >> z)
     {
-        glm::vec3 point(x * xScaleFactor, y * yScaleFactor, z * zScaleFactor); // Forsterker z for bedre synlighet
+        glm::vec3 point(x * xScale, y * yScale, z * zScale); // Forsterker z for bedre synlighet
         point += translationOffset; // Flytter punktene etter skalering
         points.push_back(point);
 
-        // Skriv ut de første 100 punktene for å bekrefte at de er riktig lastet inn
+        // Writes out the 10 coordinates from the text file to see that the translation is ok
         if (pointCounter < 10)
         {
-            cout << "Punkt " << pointCounter + 1 << ": "
+            cout << "Point " << pointCounter + 1 << ": "
                 << point.x << ", " << point.y << ", " << point.z <<endl;
         }
         pointCounter++;
     }
-
+    //Closes the file and the function returns the points vector
     inFile.close();
-    cout << "Totalt antall lastede punkter: " << points.size() <<endl;
+    cout << "Total number of loaded points: " << points.size() <<endl;
     return points;
 }
 
-std::vector<glm::vec3> loadPointsFromMultipleTextFiles(const std::vector<std::string>& textFiles)
+//Function that loads multiple text files and returns one vector with all the coodinates 
+vector<glm::vec3> loadPointsFromMultipleTextFiles(const vector<string>& textFiles)
 {
-    std::vector<glm::vec3> allPoints;
+    //Stores the data points from all the text files
+    vector<glm::vec3> allPoints;
 
     for (const auto& textFile : textFiles)
     {
-        std::cout << "Laster punkter fra " << textFile << std::endl;
-        std::vector<glm::vec3> points = loadPointsFromTextFile(textFile);
+        vector<glm::vec3> points = loadPointsFromTextFile(textFile);
         allPoints.insert(allPoints.end(), points.begin(), points.end());
     }
 
