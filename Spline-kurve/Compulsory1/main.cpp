@@ -37,26 +37,11 @@ std::vector<glm::vec3> controlPoints = {
     glm::vec3(0.0f, 2.0f,  0.0f), glm::vec3(1.0f,  2.0f,  0.0f), glm::vec3(2.0f,  2.0f,  0.0f), glm::vec3(3.0f,  2.0f,  0.0f),
 };
 
-
-glm::vec3 BSplineSurface(float u, float v, const std::vector<glm::vec3>& controlPoints, int width)
-{
-    // B-spline basis-funksjoner for kvadratisk spline (grad 2)
-    float n_u[3] = { (1.0f - u) * (1.0f - u) / 2.0f, -u * u + 1.0f, u * u / 2.0f };
-    float n_v[3] = { (1.0f - v) * (1.0f - v) / 2.0f, -v * v + 1.0f, v * v / 2.0f };
-
-    glm::vec3 point(0.0f);
-    for (int i = 0; i < 3; ++i) {
-        for (int j = 0; j < 3; ++j) {
-            point += n_u[i] * n_v[j] * controlPoints[i * width + j];
-        }
-    }
-    return point;
-}
-
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void processInput(GLFWwindow* window);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
+glm::vec3 BSplineSurface(float u, float v, const vector<glm::vec3>& controlPoints, int width);
 
 
 std::string vfs = ShaderLoader::LoadShaderFromFile("vs.vs");
@@ -103,28 +88,39 @@ int main()
     // Enable depth testing
     glEnable(GL_DEPTH_TEST);
 
-    std::vector<glm::vec3> surfacePoints;
-    int resolution = 10; // Oppløsning på flaten
-    for (int i = 0; i < resolution; ++i) {
-        for (int j = 0; j < resolution; ++j) {
-            float u = i / static_cast<float>(resolution - 1);
-            float v = j / static_cast<float>(resolution - 1);
-            surfacePoints.push_back(BSplineSurface(u, v, controlPoints, 4)); // 4 er bredden på kontrollpunktsnettet
+    //Generating surface points for the B-spline surface 
+    vector<glm::vec3> surfacePoints;
+    //The number of points on the surface in each direction. Here 100 points will be calculated 
+    int pointsOnTheSurface = 10; 
+    for (int i = 0; i < pointsOnTheSurface; ++i) 
+    {
+        for (int j = 0; j < pointsOnTheSurface; ++j) 
+        {
+            //Normalizes u and v to be in a range of 0 to 1
+            float u = i / static_cast<float>(pointsOnTheSurface - 1);
+            float v = j / static_cast<float>(pointsOnTheSurface - 1);
+            //The width of 4 is telling how many control points there are in each row 
+            surfacePoints.push_back(BSplineSurface(u, v, controlPoints, 4));
         }
     }
 
-    // Indekser for å tegne wireframe
-    std::vector<unsigned int> indices;
-    for (int i = 0; i < resolution - 1; ++i) {
-        for (int j = 0; j < resolution - 1; ++j) {
-            indices.push_back(i * resolution + j);
-            indices.push_back((i + 1) * resolution + j);
-
-            indices.push_back(i * resolution + j);
-            indices.push_back(i * resolution + (j + 1));
+   //Generates wireframe for the B-spline surface
+   //Connects the surface points in a grid with lines 
+    vector<unsigned int> indices;
+    for (int i = 0; i < pointsOnTheSurface - 1; ++i) 
+    {
+        for (int j = 0; j < pointsOnTheSurface - 1; ++j) 
+        {
+            //Connects a point (i,j) to a point directly under it at (i+1,j)
+            indices.push_back(i * pointsOnTheSurface + j);
+            indices.push_back((i + 1) * pointsOnTheSurface + j);
+            //Connects a point (i,j) to a point directly to its right at (i,j+1)
+            indices.push_back(i * pointsOnTheSurface + j);
+            indices.push_back(i * pointsOnTheSurface + (j + 1));
         }
     }
 
+    //For the wireframe 
     unsigned int VBO, VAO, EBO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
@@ -140,6 +136,19 @@ int main()
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW);
 
+    //Points on the surface
+    unsigned int surfaceVBO, surfaceVAO;
+    glGenVertexArrays(1, &surfaceVAO);
+    glGenBuffers(1, &surfaceVBO);
+
+    glBindVertexArray(surfaceVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, surfaceVBO);
+    glBufferData(GL_ARRAY_BUFFER, surfacePoints.size() * sizeof(glm::vec3), &surfacePoints[0], GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    //For the contol points 
     unsigned int controlVBO, controlVAO;
     glGenVertexArrays(1, &controlVAO);
     glGenBuffers(1, &controlVBO);
@@ -174,8 +183,15 @@ int main()
         model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f));
         ourShader.setMat4("model", model);
 
+        //Render wireframe
         glBindVertexArray(VAO);
         glDrawElements(GL_LINES, indices.size(), GL_UNSIGNED_INT, 0);
+        glBindVertexArray(0);
+
+        // Render surface points
+        glBindVertexArray(surfaceVAO);
+        glPointSize(6.0f);
+        glDrawArrays(GL_POINTS, 0, surfacePoints.size());
         glBindVertexArray(0);
 
         // Render control points
@@ -243,6 +259,31 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
     camera.ProcessMouseScroll(static_cast<float>(yoffset));
+}
+
+//Calculates the points on a biquadratic B-spline surface. 
+glm::vec3 BSplineSurface(float u, float v, const vector<glm::vec3>& controlPoints, int width)
+{
+    //u and v are parameters between 0 and 1. u is horisontal direction and v i vertical direction. 
+    //The control points defines the shape of the surface. 
+    //witdh it hod many control points there are in the horisontal direction 
+    //(1.0f - u) * (1.0f - u) is the first basis function for quadratic B-spline.
+    // 2 * u * (1.0f - u) is the second basis function for quadratic B-spline.
+    //u * u is the third basis function for quadratic B-spline.
+    float n_u[3] = { (1.0f - u) * (1.0f - u), 2 * u * (1.0f - u), u * u };
+    float n_v[3] = { (1.0f - v) * (1.0f - v), 2 * v * (1.0f - v), v * v };
+
+    //The function only takes the grid of 3x3 of control points. So it is only accessing the 3 first points in both the horisontal and vertical 
+    //direction. If the function takes a grid of 4x3 we need to switch it to a cubic B-spline. 
+    //The nedted loop iterates in the vertical and horisontal direction 
+    //is the 3D position of the control point. 
+    glm::vec3 point(0.0f);
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            point += n_u[i] * n_v[j] * controlPoints[i * width + j];
+        }
+    }
+    return point;
 }
 
 
